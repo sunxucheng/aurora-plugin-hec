@@ -1,0 +1,12 @@
+<web-app>
+	<servlet>
+		<servlet-name>hec_exporter</servlet-name>
+		<servlet-class>aurora.plugin.hec.export.SqlExcelExportServlet</servlet-class>
+	</servlet>
+	
+	<servlet-mapping>
+		<servlet-name>hec_exporter</servlet-name>
+		<url-pattern>/hec_exporter</url-pattern>
+	</servlet-mapping>
+
+</web-app>
