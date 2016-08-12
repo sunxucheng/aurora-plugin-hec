@@ -24,9 +24,41 @@ public class SqlExcelExporter implements IExporter {
 		wb = new SXSSFWorkbook();
 	}
 
-	@Override
-	public Workbook doExport(Object dataSet, List<String> promptList)
-			throws SQLException {
+	//
+	// public Workbook doExport(Object dataSet, List<String> promptList)
+	// throws SQLException {
+	// SXSSFWorkbook wb = new SXSSFWorkbook(100);
+	// Sheet sh = wb.createSheet();
+	// Map<String, CellStyle> styles = createStyles(wb);
+	// int rowIndex = 0;
+	// Row headRow = sh.createRow(0);
+	// int columnLength = promptList.size();
+	// int columnIndex = 0;
+	//
+	// for (Object promptObj : promptList) {
+	// String prompt = (String) promptObj;
+	// Cell promptCell = headRow.createCell(promptList.indexOf(promptObj));
+	// promptCell.setCellValue(prompt);
+	// sh.setColumnWidth(columnIndex, 20 * 256);
+	// promptCell.setCellStyle(styles.get("header"));
+	// columnIndex++;
+	// }
+	// ResultSet rs = (ResultSet) dataSet;
+	// while (rs.next()) {
+	// rowIndex++;
+	// Row valueRow = sh.createRow(rowIndex);
+	// for (int i = 0; i < columnLength; i++) {
+	// Cell valueCell = valueRow.createCell(i);
+	// String cellValue = rs.getString(i + 1);
+	// valueCell.setCellValue(cellValue);
+	// valueCell.setCellStyle(styles.get("cell_normal_centered"));
+	// }
+	// }
+	// return wb;
+	// }
+
+	public Workbook doExport(Object dataSet,
+			List<Map<String, Object>> promptList) throws SQLException {
 		SXSSFWorkbook wb = new SXSSFWorkbook(100);
 		Sheet sh = wb.createSheet();
 		Map<String, CellStyle> styles = createStyles(wb);
@@ -35,11 +67,18 @@ public class SqlExcelExporter implements IExporter {
 		int columnLength = promptList.size();
 		int columnIndex = 0;
 
-		for (Object promptObj : promptList) {
-			String prompt = (String) promptObj;
-			Cell promptCell = headRow.createCell(promptList.indexOf(promptObj));
+		int clm_width = 5120;
+		for (Map<String, Object> promptMap : promptList) {
+			String prompt = (String) promptMap.get("column_prompt");
+			Cell promptCell = headRow.createCell(promptList.indexOf(promptMap));
 			promptCell.setCellValue(prompt);
-			sh.setColumnWidth(columnIndex, 20 * 256);
+			try {
+				clm_width = Integer.parseInt((String) promptMap
+						.get("clm_width"));
+			} catch (NumberFormatException e) {
+				clm_width = 5120;
+			}
+			sh.setColumnWidth(columnIndex, clm_width);
 			promptCell.setCellStyle(styles.get("header"));
 			columnIndex++;
 		}
@@ -47,11 +86,21 @@ public class SqlExcelExporter implements IExporter {
 		while (rs.next()) {
 			rowIndex++;
 			Row valueRow = sh.createRow(rowIndex);
+			Map<String, Object> promptMap = new HashMap<String, Object>();
+			String style_key = null;
 			for (int i = 0; i < columnLength; i++) {
 				Cell valueCell = valueRow.createCell(i);
 				String cellValue = rs.getString(i + 1);
-				valueCell.setCellValue(cellValue);
-				valueCell.setCellStyle(styles.get("cell_normal_centered"));
+				promptMap = (Map<String, Object>) promptList.get(i);
+				style_key = (String) promptMap.get("value_cell_style");
+				valueCell.setCellStyle(styles.get(style_key));
+				if (style_key.equals("cell_normal_money")) {
+					valueCell.setCellValue(cellValue == null
+							|| cellValue.equals("") ? 0.00 : Float
+							.parseFloat(cellValue));
+				} else {
+					valueCell.setCellValue(cellValue);
+				}
 			}
 		}
 		return wb;
@@ -182,6 +231,13 @@ public class SqlExcelExporter implements IExporter {
 		style.setFillForegroundColor(IndexedColors.BLUE.getIndex());
 		style.setFillPattern(CellStyle.SOLID_FOREGROUND);
 		styles.put("cell_blue", style);
+
+		// add sxc 2016-08-01 增加千分位
+		style = createBorderedStyle(wb);
+		style.setFont(font4);
+		style.setAlignment(CellStyle.ALIGN_RIGHT);
+		style.setDataFormat(df.getFormat("#,##0.00"));
+		styles.put("cell_normal_money", style);
 
 		return styles;
 	}

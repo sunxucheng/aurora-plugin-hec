@@ -11,7 +11,9 @@ import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
@@ -31,94 +33,7 @@ public class SqlExcelExportServlet extends HttpServlet {
 
 	private static final long serialVersionUID = -979413117068433450L;
 
-	protected void doService(HttpServletRequest req, HttpServletResponse resp)
-			throws ServletException, IOException, SQLException {
-		Connection conn = null;
-		PreparedStatement sqlStmt = null;
-		PreparedStatement promptStmt = null;
-		PreparedStatement paramStmt = null;
-		PreparedStatement resultStmt = null;
-		ResultSet sqlRs = null;
-		ResultSet promptRs = null;
-		ResultSet paramRs = null;
-		ResultSet resultRs = null;
-		List<String> paramList = null;
-		try {
-			String sqlCode = req.getParameter("sql_code");
-			conn = getConnection(req);
-			sqlStmt = conn
-					.prepareStatement("select sql_text,export_file_name from hec_excel_exporter_config c where c.sql_code = ?");
-			sqlStmt.setString(1, sqlCode);
-			sqlRs = sqlStmt.executeQuery();
-			sqlRs.next();
-			String querySql = sqlRs.getString(1);
-			String exportFileName = sqlRs.getString(2)
-					+ "_"
-					+ new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-							.format(new Date()) + ".xlsx";
-			promptStmt = conn
-					.prepareStatement("select column_prompt from hec_excel_exporter_prompts p where p.sql_code = ? order by p.column_sequence");
-			promptStmt.setString(1, sqlCode);
-			promptRs = promptStmt.executeQuery();
-			List<String> promptList = new ArrayList<String>();
-			while (promptRs.next()) {
-				String prompt = promptRs.getString(1);
-				promptList.add(prompt);
-			}
-			paramStmt = conn
-					.prepareStatement("select param_name from hec_excel_exporter_params p where p.sql_code = ? order by p.param_sequence");
-			paramStmt.setString(1, sqlCode);
-			paramRs = paramStmt.executeQuery();
-			paramList = new ArrayList<String>();
-			while (paramRs.next()) {
-				paramList.add(paramRs.getString(1));
-			}
-			resultStmt = conn.prepareStatement(querySql);
-			if (paramList != null) {
-				for (int paramIndex = 0; paramIndex < paramList.size(); paramIndex++) {
-					String paramValue = req.getParameter(paramList
-							.get(paramIndex));
-					resultStmt.setString(paramIndex + 1, paramValue);
-				}
-			}
-			resultRs = resultStmt.executeQuery();
-			int columnCount = resultStmt.getMetaData().getColumnCount();
-			if (columnCount != promptList.size()) {
-				String errorMsg = "excel导出器中设置的查询结果列数量与表头列数量不匹配，请联系管理员!";
-				resp.setContentLength(errorMsg.getBytes().length);
-				resp.setContentType("text/plain;charset=utf-8");
-				resp.getWriter().append(errorMsg);
-				resp.getWriter().close();
-				return;
-			} else {
-				IExporter exporter = new SqlExcelExporter();
-				Workbook wb = exporter.doExport(resultRs, promptList);
-				resp.setContentType("application/vnd.ms-excel");
-				resp.setHeader("Content-Disposition", "attachment;"
-						+ processFileName(req, exportFileName));
-				resp.setHeader("cache-control", "must-revalidate");
-				resp.setHeader("pragma", "public");
-				OutputStream ops = resp.getOutputStream();
-				wb.write(ops);
-				ops.close();
-				exporter.dispose();
-			}
-		} catch (SQLException sex) {
-			sex.printStackTrace();
-		} finally {
-			DBUtil.closeResultSet(resultRs);
-			DBUtil.closeResultSet(sqlRs);
-			DBUtil.closeResultSet(paramRs);
-			DBUtil.closeResultSet(promptRs);
-			DBUtil.closeStatement(sqlStmt);
-			DBUtil.closeStatement(promptStmt);
-			DBUtil.closeStatement(paramStmt);
-			DBUtil.closeStatement(resultStmt);
-			DBUtil.closeConnection(conn);
-		}
-
-	}
-
+	// 增加 样式与列宽
 	protected void doServiceWhereClause(HttpServletRequest req,
 			HttpServletResponse resp) throws ServletException, IOException,
 			SQLException {
@@ -150,15 +65,19 @@ public class SqlExcelExportServlet extends HttpServlet {
 							.format(new Date()) + ".xlsx";
 			promptStmt = conn
 					.prepareStatement(
-							"select column_prompt,column_name from hec_excel_exporter_prompts p where p.sql_code = ? order by p.column_sequence",
+							"select column_prompt,column_name,clm_width,value_cell_style from hec_excel_exporter_prompts p where p.sql_code = ? order by p.column_sequence",
 							ResultSet.TYPE_SCROLL_SENSITIVE,
 							ResultSet.CONCUR_READ_ONLY);
 			promptStmt.setString(1, sqlCode);
 			promptRs = promptStmt.executeQuery();
-			List<String> promptList = new ArrayList<String>();
+			List<Map<String, Object>> promptList = new ArrayList<Map<String, Object>>();
 			selectClm = "select ";
 			while (promptRs.next()) {
-				String prompt = promptRs.getString(1);
+				Map<String, Object> prompt = new HashMap<String, Object>();
+				prompt.put("column_prompt", promptRs.getString(1));
+				prompt.put("clm_width", promptRs.getString(3));
+				prompt.put("value_cell_style", promptRs.getString(4));
+
 				if (promptRs.isLast()) {
 					selectClm += promptRs.getString(2) + " from(";
 				} else {
@@ -262,8 +181,6 @@ public class SqlExcelExportServlet extends HttpServlet {
 	protected void doGet(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException {
 		try {
-			// doService(req, resp);
-			// 第二种方式
 			doServiceWhereClause(req, resp);
 		} catch (SQLException sex) {
 
@@ -275,7 +192,7 @@ public class SqlExcelExportServlet extends HttpServlet {
 	protected void doPost(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException {
 		try {
-			doService(req, resp);
+			doServiceWhereClause(req, resp);
 		} catch (SQLException sex) {
 
 		}
